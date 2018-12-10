@@ -36,6 +36,7 @@
 #include "common/config/well_known_names.h"
 #include "common/network/utility.h"
 #include "common/stats/isolated_store_impl.h"
+#include "common/upstream/eds_subscription_factory.h"
 #include "common/upstream/load_balancer_impl.h"
 #include "common/upstream/outlier_detection_impl.h"
 #include "common/upstream/resource_manager_impl.h"
@@ -490,7 +491,8 @@ public:
          Ssl::ContextManager& ssl_context_manager, Runtime::Loader& runtime,
          Runtime::RandomGenerator& random, Event::Dispatcher& dispatcher,
          AccessLog::AccessLogManager& log_manager, const LocalInfo::LocalInfo& local_info,
-         Outlier::EventLoggerSharedPtr outlier_event_logger, bool added_via_api);
+         Outlier::EventLoggerSharedPtr outlier_event_logger, bool added_via_api,
+         Upstream::EdsSubscriptionFactory& eds_subscription_factory);
   // From Upstream::Cluster
   virtual PrioritySet& prioritySet() override { return priority_set_; }
   virtual const PrioritySet& prioritySet() const override { return priority_set_; }
@@ -662,25 +664,13 @@ protected:
    * priority.
    * @param updated_hosts is used to aggregate the new state of all hosts across priority, and will
    * be updated with the hosts that remain in this priority after the update.
+   * @param all_hosts all known hosts prior to this host update.
    * @return whether the hosts for the priority changed.
    */
   bool updateDynamicHostList(const HostVector& new_hosts, HostVector& current_priority_hosts,
                              HostVector& hosts_added_to_current_priority,
                              HostVector& hosts_removed_from_current_priority,
-                             std::unordered_map<std::string, HostSharedPtr>& updated_hosts);
-
-  typedef std::unordered_map<std::string, Upstream::HostSharedPtr> HostMap;
-
-  /**
-   * Updates the internal collection of all hosts. This should be called with the updated
-   * map of hosts after issuing updateDynamicHostList for each priority.
-   *
-   * @param all_hosts the updated map of address to host after a cluster update.
-   */
-  void updateHostMap(HostMap&& all_hosts) { all_hosts_ = std::move(all_hosts); }
-
-private:
-  HostMap all_hosts_;
+                             HostMap& updated_hosts, const HostMap& all_hosts);
 };
 
 /**
@@ -714,6 +704,7 @@ private:
     HostVector hosts_;
     const envoy::api::v2::endpoint::LocalityLbEndpoints locality_lb_endpoint_;
     const envoy::api::v2::endpoint::LbEndpoint lb_endpoint_;
+    HostMap all_hosts_;
   };
 
   typedef std::unique_ptr<ResolveTarget> ResolveTargetPtr;
